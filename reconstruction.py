@@ -1,22 +1,25 @@
+#!/usr/bin/env python3
+
+
 import rospy
 
 import numpy as np
 import open3d as o3d
 
 
-from airsim_ros_pkgs.msg import Image
+from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 from airsim_base.types import Pose
 from airsim_gym.airsim_simulation_resources.utils import image_transport
 
 class R3D:
-    def __init__(self, 
-                 img_width : int, /
-                 img_height : int, /
-                 img_fov : float, /
-                 rgb_topic : str, /
-                 seg_topic : str, /
+    def __init__(self, \
+                 img_width : int, \
+                 img_height : int, \
+                 img_fov : float, \
+                 rgb_topic : str, \
+                 seg_topic : str, \
                  depth_topic : str) -> None:
         
         rospy.Subscriber(rgb_topic, Image, self._callback_rgb)
@@ -28,7 +31,8 @@ class R3D:
         self._rgb = None
         self._seg = None
         self._depth = None
-        self._map = o3d.PointCloud()
+        
+        self._map = o3d.geometry.PointCloud()
         self._trajectory = []
         
         self.fov_rad = img_fov * np.pi/180
@@ -63,8 +67,14 @@ class R3D:
         return data, "depth"
     
     def _get_transform_matrix(self, vehicle_pose : Pose) -> np.array:
-        x, y, z = vehicle_pose.position
-        qx, qy, qz, qw = vehicle_pose.orientation
+        x = vehicle_pose.position.x
+        y = vehicle_pose.position.y
+        z = vehicle_pose.position.z
+        
+        qx = vehicle_pose.orientation.x
+        qy = vehicle_pose.orientation.y
+        qz = vehicle_pose.orientation.z
+        qw = vehicle_pose.orientation.w
         
         T = np.eye(4)
         T[:3, :3] = [-y, -z, -x]
@@ -83,15 +93,19 @@ class R3D:
     
     def create_map(self, vehicle_pose : Pose, type_vis : str, depth_trunc : float, viz : bool = True):
         color_map = self.__getattribute__("_" + type_vis)
+       
+        
         color_img= o3d.geometry.Image(np.asarray(color_map))
-        depth_img = o3d.geometry.Image(self._depth)
+        depth_img = o3d.geometry.Image(self._depth.astype(np.float32)) 
+        
         F = self._get_transform_matrix(vehicle_pose)
         
         rgbd_img = o3d.geometry.RGBDImage.create_from_color_and_depth(color_img, depth_img, depth_scale=1.0, depth_trunc=depth_trunc, convert_rgb_to_intensity=False)
-        rgbd_pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_img, self._camera, extrinsic = F)
+        o3d.visualization.draw_geometries(rgbd_img)
+        #rgbd_pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_img, self._camera)
         
-        self._map += rgbd_pcd
-        self._trajectory.append(o3d.LineSet.create_camera_visualization(self._camera, F))
+        #self._map += rgbd_pcd
+        #self._trajectory.append(o3d.geometry.LineSet.create_camera_visualization(self._camera, F))
         
         if viz:
             poses = [self._map]
@@ -99,7 +113,13 @@ class R3D:
             o3d.visualization.draw_geometries(poses)
             
         
+            
+    def exec(self, data):
+        pose = data.pose.pose
+        self.create_map(pose, "rgb", 100000)
+            
         
+
         
         
     
